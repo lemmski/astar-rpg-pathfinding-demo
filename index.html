@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A* Algorithm Demo</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            margin-bottom: 10px;
+        }
+        button {
+            margin: 5px;
+            padding: 5px 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>A* Algorithm Demo</h1>
+    <canvas id="gameCanvas" width="500" height="500"></canvas>
+    <div>
+        <button id="findPathBtn">Find Path</button>
+        <button id="resetBtn">Reset</button>
+    </div>
+    <p id="message"></p>
+    <p>Click to set start (green) and end (red) points. Hold Ctrl and click to toggle obstacles (black).</p>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const findPathBtn = document.getElementById('findPathBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const messageEl = document.getElementById('message');
+
+        const GRID_SIZE = 20;
+        const CELL_SIZE = 25;
+
+        let grid = [];
+        let start = null;
+        let end = null;
+        let path = [];
+
+        function initializeGrid() {
+            grid = Array(GRID_SIZE).fill().map(() => Array(GRID_SIZE).fill(0));
+            start = null;
+            end = null;
+            path = [];
+            drawGrid();
+            updateMessage('Set the start point');
+        }
+
+        function drawGrid() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            for (let y = 0; y < GRID_SIZE; y++) {
+                for (let x = 0; x < GRID_SIZE; x++) {
+                    ctx.strokeStyle = '#ccc';
+                    ctx.strokeRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+
+                    if (grid[y][x] === 1) {
+                        ctx.fillStyle = '#333';
+                        ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+                    }
+                }
+            }
+
+            if (start) {
+                ctx.fillStyle = 'green';
+                ctx.fillRect(start.x * CELL_SIZE, start.y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+            }
+
+            if (end) {
+                ctx.fillStyle = 'red';
+                ctx.fillRect(end.x * CELL_SIZE, end.y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+            }
+
+            if (path.length > 0) {
+                ctx.strokeStyle = 'blue';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo((path[0].x + 0.5) * CELL_SIZE, (path[0].y + 0.5) * CELL_SIZE);
+                for (let i = 1; i < path.length; i++) {
+                    ctx.lineTo((path[i].x + 0.5) * CELL_SIZE, (path[i].y + 0.5) * CELL_SIZE);
+                }
+                ctx.stroke();
+            }
+        }
+
+        function handleCanvasClick(event) {
+            const rect = canvas.getBoundingClientRect();
+            const x = Math.floor((event.clientX - rect.left) / CELL_SIZE);
+            const y = Math.floor((event.clientY - rect.top) / CELL_SIZE);
+
+            if (event.ctrlKey) {
+                toggleObstacle(x, y);
+            } else if (!start) {
+                start = { x, y };
+                updateMessage('Now set the end point');
+            } else if (!end) {
+                end = { x, y };
+                updateMessage('Click "Find Path" to run the A* algorithm');
+            }
+            drawGrid();
+        }
+
+        function toggleObstacle(x, y) {
+            grid[y][x] = grid[y][x] === 1 ? 0 : 1;
+        }
+
+        function updateMessage(msg) {
+            messageEl.textContent = msg;
+        }
+
+        function findPath() {
+            if (!start || !end) {
+                updateMessage('Please set both start and end points');
+                return;
+            }
+
+            const result = astar(grid, start, end);
+            if (result.path) {
+                path = result.path;
+                updateMessage('Path found!');
+            } else {
+                updateMessage('No path found');
+            }
+            drawGrid();
+        }
+
+        function astar(grid, start, end) {
+            const openSet = [start];
+            const closedSet = [];
+            const cameFrom = {};
+            const gScore = { [nodeKey(start)]: 0 };
+            const fScore = { [nodeKey(start)]: heuristic(start, end) };
+
+            while (openSet.length > 0) {
+                let current = openSet.reduce((a, b) => fScore[nodeKey(a)] < fScore[nodeKey(b)] ? a : b);
+
+                if (current.x === end.x && current.y === end.y) {
+                    return { path: reconstructPath(cameFrom, current) };
+                }
+
+                openSet.splice(openSet.indexOf(current), 1);
+                closedSet.push(current);
+
+                const neighbors = getNeighbors(grid, current);
+                for (let neighbor of neighbors) {
+                    if (closedSet.some(node => node.x === neighbor.x && node.y === neighbor.y)) continue;
+
+                    const tentativeGScore = gScore[nodeKey(current)] + 1;
+
+                    if (!openSet.some(node => node.x === neighbor.x && node.y === neighbor.y)) {
+                        openSet.push(neighbor);
+                    } else if (tentativeGScore >= gScore[nodeKey(neighbor)]) {
+                        continue;
+                    }
+
+                    cameFrom[nodeKey(neighbor)] = current;
+                    gScore[nodeKey(neighbor)] = tentativeGScore;
+                    fScore[nodeKey(neighbor)] = gScore[nodeKey(neighbor)] + heuristic(neighbor, end);
+                }
+            }
+
+            return { path: null };
+        }
+
+        function nodeKey(node) {
+            return `${node.x},${node.y}`;
+        }
+
+        function heuristic(a, b) {
+            return Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+        }
+
+        function getNeighbors(grid, node) {
+            const neighbors = [];
+            const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+
+            for (let [dx, dy] of directions) {
+                const x = node.x + dx;
+                const y = node.y + dy;
+
+                if (x >= 0 && x < GRID_SIZE && y >= 0 && y < GRID_SIZE && grid[y][x] !== 1) {
+                    neighbors.push({ x, y });
+                }
+            }
+
+            return neighbors;
+        }
+
+        function reconstructPath(cameFrom, current) {
+            const path = [current];
+            while (cameFrom[nodeKey(current)]) {
+                current = cameFrom[nodeKey(current)];
+                path.unshift(current);
+            }
+            return path;
+        }
+
+        canvas.addEventListener('click', handleCanvasClick);
+        findPathBtn.addEventListener('click', findPath);
+        resetBtn.addEventListener('click', initializeGrid);
+
+        initializeGrid();
+    </script>
+</body>
+</html>
