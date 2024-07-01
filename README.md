@@ -36,7 +36,7 @@ This project is [MIT](./LICENSE) licensed.
 
 ## Author
 
-Your Name
+Aleksi Lemmetyinen
 
 ---
 
